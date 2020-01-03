@@ -32,6 +32,8 @@ cmake_paths
 libcoap:with_openssl=False
 ```
 
+add to your CMakeLists.txt
+
 ```cmake
 find_package(libcoap REQUIRED)
 #...
