@@ -15,8 +15,11 @@ conan upload libcoap -r gocarlos
 
 ```bash
 conan remote add gocarlos https://api.bintray.com/conan/gocarlos/public-conan
+```
 
-cat << EOF >> conanfiile.txt
+add to your conanfile.txt
+
+```toml
 [requires]
 libcoap/4.3.0@gocarlos/testing
 
@@ -25,5 +28,13 @@ cmake_find_package
 cmake_paths
 
 [options]
-EOF
+# if without openssl
+libcoap:with_openssl=False
+```
+
+```cmake
+find_package(libcoap REQUIRED)
+#...
+add_executable(main main.cpp)
+target_link_libraries(main PRIVATE libcoap::coap)
 ```
