@@ -1,6 +1,5 @@
 # conan-libcoap
 
-
 [![Conan](https://api.bintray.com/packages/gocarlos/public-conan/libcoap:gocarlos/images/download.svg) ](https://bintray.com/gocarlos/public-conan/libcoap:gocarlos/_latestVersion)
 
 ## lib producer

@@ -51,4 +51,5 @@ class LibcoapConan(ConanFile):
         cmake.install()
 
     def package_info(self):
-        self.cpp_info.libs = ["libcoap"]
+        self.cpp_info.libs = ["coap"]
+        self.cpp_info.name = "coap"
