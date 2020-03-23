@@ -1,55 +1,98 @@
-from conans import ConanFile, CMake, tools
+import os
+from conans import CMake, ConanFile, tools
+from conans.errors import ConanInvalidConfiguration
 
 
-class LibcoapConan(ConanFile):
+class LibCoapConan(ConanFile):
     name = "libcoap"
+    license = "BSD-2-Clause"
     version = "4.3.0"
-    license = "BSD"
-    author = "Carlos Gomes Martinho kmartinho8@gmail.com"
-    url = "https://github.com/obgm/libcoap/issues"
-    description = "A CoAP (RFC 7252) implementation in C"
+    homepage = "https://github.com/gocarlos/libcoap/"
+    url = "https://github.com/conan-io/conan-center-index"
+    description = """A CoAP (RFC 7252) implementation in C"""
     topics = ("coap")
+    exports_sources = "CMakeLists.txt"
     settings = "os", "compiler", "build_type", "arch"
     options = {
         "shared": [True, False],
-        "with_openssl": [True, False],
-        "with_gnutls": [True, False],
-        "with_tinydtls": [True, False],
+        "fPIC": [True, False],
         "with_epoll": [True, False],
+        "tls_backend": [None, "with_openssl", "with_gnutls", "with_tinydtls", "with_mbedtls"],
     }
     default_options = {
         "shared": False,
-        "with_openssl": True,
-        "with_gnutls": False,
-        "with_tinydtls": False,
+        "fPIC": True,
         "with_epoll": False,
+        "tls_backend": "with_openssl",
     }
-    generators = "cmake"
+    generators = "cmake", "cmake_find_package"
+
+    _cmake = None
 
     def source(self):
-        self.run("git clone https://github.com/gocarlos/libcoap.git")
+        self.run("git clone https://github.com/gocarlos/libcoap.git {}".format(self._source_subfolder))
 
-    def _configure_cmake(self):
-        cmake = CMake(self)
-        cmake.definitions["WITH_OPENSSL"] = self.options.with_openssl
-        cmake.definitions["WITH_GNUTLS"] = self.options.with_gnutls
-        cmake.definitions["WITH_TINYDTLS"] = self.options.with_tinydtls
-        cmake.definitions["WITH_EPOLL"] = self.options.with_epoll
-        cmake.configure(source_folder="libcoap")
-        return cmake
+    @property
+    def _source_subfolder(self):
+        return "source_subfolder"
+
+    @property
+    def _build_subfolder(self):
+        return "build_subfolder"
 
     def requirements(self):
-        if self.options.with_openssl:
+        if self.options.tls_backend == "with_openssl":
             self.requires.add("openssl/1.1.1d")
+        if self.options.tls_backend == "with_mbedtls":
+            self.requires.add("mbedtls/2.16.3-apache")
+        if self.options.tls_backend == "with_gnutls":
+            raise ConanInvalidConfiguration("gnu tls not available yet")
+        if self.options.tls_backend == "with_tinydtls":
+            raise ConanInvalidConfiguration("tinydtls not available yet")
+
+    def _patch_files(self):
+        if self.options.tls_backend == "with_openssl":
+            replace_ssl = 'OpenSSL::SSL'
+            tools.replace_in_file(os.path.join(self._source_subfolder, "CMakeLists.txt"), replace_ssl, "OpenSSL::OpenSSL")
+            replace_crypto = 'OpenSSL::Crypto'
+            tools.replace_in_file(os.path.join(self._source_subfolder, "CMakeLists.txt"), replace_crypto, "OpenSSL::OpenSSL")
+
+    def config_options(self):
+        if self.settings.os == "Windows":
+            del self.options.fPIC
+
+    def configure(self):
+        del self.settings.compiler.libcxx
+        del self.settings.compiler.cppstd
+
+    def _configure_cmake(self):
+        if self._cmake:
+            return self._cmake
+        self._cmake = CMake(self)
+        self._cmake.definitions["WITH_EPOLL"] = self.options.with_epoll
+        self._cmake.definitions["ENABLE_DTLS"] = self.options.tls_backend != None
+        self._cmake.definitions["WITH_OPENSSL"] = self.options.tls_backend == "with_openssl"
+        self._cmake.definitions["WITH_MBEDTLS"] = self.options.tls_backend == "with_mbedtls"
+        self._cmake.definitions["WITH_GNUTLS"] = self.options.tls_backend == "with_gnutls"
+        self._cmake.definitions["WITH_TINYDTLS"] = self.options.tls_backend == "with_tinydtls"
+        self._cmake.configure(source_folder=self._source_subfolder, build_folder=self._build_subfolder)
+        return self._cmake
 
     def build(self):
+        self._patch_files()
         cmake = self._configure_cmake()
         cmake.build()
 
     def package(self):
+        self.copy("LICENSE", dst='licenses', src=os.path.join(
+            self._source_subfolder, "license"))
         cmake = self._configure_cmake()
         cmake.install()
+        tools.rmdir(os.path.join(self.package_folder, "lib", "cmake"))
+        tools.rmdir(os.path.join(self.package_folder,
+                                 "lib", "libcoap", "cmake"))
 
     def package_info(self):
         self.cpp_info.libs = ["coap"]
-        self.cpp_info.name = "coap"
+        if self.settings.os == "Linux":
+            self.cpp_info.system_libs = ["pthread"]
