@@ -21,7 +21,7 @@ add to your conanfile.txt
 
 ```toml
 [requires]
-libcoap/4.3.0@gocarlos/testing
+libcoap/4.3.0@gocarlos/stable
 
 [generators]
 cmake_find_package
