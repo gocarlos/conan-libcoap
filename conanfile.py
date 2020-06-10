@@ -17,20 +17,20 @@ class LibCoapConan(ConanFile):
         "shared": [True, False],
         "fPIC": [True, False],
         "with_epoll": [True, False],
-        "tls_backend": [None, "with_openssl", "with_gnutls", "with_tinydtls", "with_mbedtls"],
+        "dtls_backend": [None, "openssl", "gnutls", "tinydtls", "mbedtls"],
     }
     default_options = {
         "shared": False,
         "fPIC": True,
         "with_epoll": False,
-        "tls_backend": "with_openssl",
+        "dtls_backend": "openssl",
     }
     generators = "cmake", "cmake_find_package"
 
     _cmake = None
 
     def source(self):
-        self.run("git clone https://github.com/gocarlos/libcoap.git {}".format(self._source_subfolder))
+        self.run("git clone https://github.com/obgm/libcoap.git {}".format(self._source_subfolder))
 
     @property
     def _source_subfolder(self):
@@ -41,17 +41,18 @@ class LibCoapConan(ConanFile):
         return "build_subfolder"
 
     def requirements(self):
-        if self.options.tls_backend == "with_openssl":
-            self.requires.add("openssl/1.1.1d")
-        if self.options.tls_backend == "with_mbedtls":
+        if self.options.dtls_backend == "openssl":
+            self.requires.add("openssl/1.1.1g")
+        if self.options.dtls_backend == "mbedtls":
             self.requires.add("mbedtls/2.16.3-apache")
-        if self.options.tls_backend == "with_gnutls":
+        if self.options.dtls_backend == "gnutls":
             raise ConanInvalidConfiguration("gnu tls not available yet")
-        if self.options.tls_backend == "with_tinydtls":
+        if self.options.dtls_backend == "tinydtls":
             raise ConanInvalidConfiguration("tinydtls not available yet")
 
     def _patch_files(self):
-        if self.options.tls_backend == "with_openssl":
+        # TODO: Remove custom targets when Conan components be available.
+        if self.options.dtls_backend == "openssl":
             replace_ssl = 'OpenSSL::SSL'
             tools.replace_in_file(os.path.join(self._source_subfolder, "CMakeLists.txt"), replace_ssl, "OpenSSL::OpenSSL")
             replace_crypto = 'OpenSSL::Crypto'
@@ -62,6 +63,9 @@ class LibCoapConan(ConanFile):
             del self.options.fPIC
 
     def configure(self):
+        if self.settings.os in ("Windows", "Macos"):
+            raise ConanInvalidConfiguration("Platform is currently not supported")
+
         del self.settings.compiler.libcxx
         del self.settings.compiler.cppstd
 
@@ -70,11 +74,8 @@ class LibCoapConan(ConanFile):
             return self._cmake
         self._cmake = CMake(self)
         self._cmake.definitions["WITH_EPOLL"] = self.options.with_epoll
-        self._cmake.definitions["ENABLE_DTLS"] = self.options.tls_backend != None
-        self._cmake.definitions["WITH_OPENSSL"] = self.options.tls_backend == "with_openssl"
-        self._cmake.definitions["WITH_MBEDTLS"] = self.options.tls_backend == "with_mbedtls"
-        self._cmake.definitions["WITH_GNUTLS"] = self.options.tls_backend == "with_gnutls"
-        self._cmake.definitions["WITH_TINYDTLS"] = self.options.tls_backend == "with_tinydtls"
+        self._cmake.definitions["ENABLE_DTLS"] = self.options.dtls_backend != None
+        self._cmake.definitions["DTLS_BACKEND"] = self.options.dtls_backend
         self._cmake.configure(source_folder=self._source_subfolder, build_folder=self._build_subfolder)
         return self._cmake
 
@@ -84,8 +85,7 @@ class LibCoapConan(ConanFile):
         cmake.build()
 
     def package(self):
-        self.copy("LICENSE", dst='licenses', src=os.path.join(
-            self._source_subfolder, "license"))
+        self.copy("LICENSE", src=self._source_subfolder, dst="licenses")
         cmake = self._configure_cmake()
         cmake.install()
         tools.rmdir(os.path.join(self.package_folder, "lib", "cmake"))
@@ -93,6 +93,7 @@ class LibCoapConan(ConanFile):
                                  "lib", "libcoap", "cmake"))
 
     def package_info(self):
-        self.cpp_info.libs = ["coap"]
+        self.cpp_info.libs = tools.collect_libs(self)
+        # self.cpp_info.names['pkg_config'] = "libcoap-2{}".format("-" + self.options.dtls_backend if self.options.dtls_backend else "")
         if self.settings.os == "Linux":
             self.cpp_info.system_libs = ["pthread"]
